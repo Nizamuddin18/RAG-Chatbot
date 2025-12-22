@@ -1,2 +1,6 @@
 /chatbot-be/chatbot_be.egg-info/
 /chatbot-be/.env
+/chatbot-ui/.env
+/chatbot-be/uv.lock
+/chatbot-be/test.ipynb
+/chatbot-be/agents.json
