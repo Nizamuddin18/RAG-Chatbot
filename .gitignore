@@ -4,3 +4,6 @@
 /chatbot-be/uv.lock
 /chatbot-be/test.ipynb
 /chatbot-be/agents.json
+/chatbot-be/logs/app.json.log
+/chatbot-be/logs/app.log
+/chatbot-be/logs/error.log
