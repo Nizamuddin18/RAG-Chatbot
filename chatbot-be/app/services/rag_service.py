@@ -326,52 +326,55 @@ Context: {{context}}
         index_name: str,
         query: str
     ) -> AsyncIterator[str]:
-        """Execute agent with RAG using streaming"""
+        """Execute agent with RAG using streaming (same business logic as non-streaming)"""
         try:
-            # Get retriever
+            # Get retriever (SAME AS NON-STREAMING)
             retriever = self.vector_store_helper.get_retriever(index_name, k=3)
             if not retriever:
                 raise IndexNotFoundError(f"Index {index_name} not found")
 
-            # Get context documents first
-            docs = retriever.get_relevant_documents(query)
-
-            # Send context documents
-            context_docs = []
-            for doc in docs:
-                context_docs.append({
-                    "content": doc.page_content,
-                    "metadata": doc.metadata
-                })
-
-            context_event = {
-                "type": "context",
-                "documents": context_docs
-            }
-            yield f"data: {json.dumps(context_event)}\n\n"
-
-            # Create prompt with context
-            context_text = "\n\n".join([doc.page_content for doc in docs])
+            # Create prompt with context placeholder (SAME AS NON-STREAMING)
             system_prompt = f"""{system_instruction}
 
-Context: {context_text}
+Context: {{context}}
 """
             prompt = ChatPromptTemplate.from_messages([
                 ("system", system_prompt),
                 ("user", "{input}")
             ])
 
-            # Create chain
-            chain = prompt | chat_model
+            # Create RAG chain (SAME AS NON-STREAMING)
+            question_answer_chain = create_stuff_documents_chain(chat_model, prompt)
+            rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
-            # Stream response
-            async for chunk in chain.astream({"input": query}):
-                if chunk.content:
-                    chunk_data = {
-                        "type": "content",
-                        "content": chunk.content
+            # Stream response (only difference: astream vs invoke)
+            context_sent = False
+            async for chunk in rag_chain.astream({"input": query}):
+                # Send context documents event (once)
+                if not context_sent and "context" in chunk:
+                    context_docs = []
+                    for doc in chunk["context"]:
+                        context_docs.append({
+                            "content": doc.page_content,
+                            "metadata": doc.metadata
+                        })
+
+                    context_event = {
+                        "type": "context",
+                        "documents": context_docs
                     }
-                    yield f"data: {json.dumps(chunk_data)}\n\n"
+                    yield f"data: {json.dumps(context_event)}\n\n"
+                    context_sent = True
+
+                # Send content chunks
+                if "answer" in chunk:
+                    content = chunk["answer"]
+                    if content:
+                        chunk_data = {
+                            "type": "content",
+                            "content": content
+                        }
+                        yield f"data: {json.dumps(chunk_data)}\n\n"
 
         except Exception as e:
             self.logger.error(f"Error in RAG streaming: {str(e)}", exc_info=True)
