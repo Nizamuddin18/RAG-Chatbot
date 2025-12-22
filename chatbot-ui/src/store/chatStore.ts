@@ -23,13 +23,16 @@ interface ChatStore {
   currentAgent: Agent | null;
   isExecuting: boolean;
   error: string | null;
+  useStreaming: boolean; // Toggle between streaming and non-streaming
 
   sendMessage: (query: string) => Promise<void>;
+  sendMessageStreaming: (query: string) => Promise<void>;
   setAgent: (agent: Agent) => void;
   clearMessages: () => void;
   loadHistory: (agentId: string) => void;
   saveHistory: () => void;
   clearError: () => void;
+  toggleStreaming: () => void;
 }
 
 const STORAGE_KEY_PREFIX = 'chat_history_';
@@ -54,8 +57,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   currentAgent: null,
   isExecuting: false,
   error: null,
+  useStreaming: true, // Default to streaming for better UX
 
   sendMessage: async (query: string) => {
+    const { useStreaming } = get();
+
+    // Use streaming or non-streaming based on toggle
+    if (useStreaming) {
+      return get().sendMessageStreaming(query);
+    }
+
+    // Original non-streaming implementation
     const { currentAgent, messages } = get();
 
     // Validate agent
@@ -135,6 +147,159 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
+  sendMessageStreaming: async (query: string) => {
+    const { currentAgent, messages } = get();
+
+    // Validate agent
+    if (!currentAgent) {
+      toast.error('Please select an agent first');
+      return;
+    }
+
+    // Validate agent ID
+    if (!isValidAgentId(currentAgent.agent_id)) {
+      toast.error('Invalid agent configuration');
+      return;
+    }
+
+    // Validate and sanitize message
+    const validation = validateMessage(query);
+    if (!validation.valid) {
+      toast.error(validation.error || 'Invalid message');
+      return;
+    }
+
+    // Rate limiting check
+    if (!rateLimiter.canMakeRequest()) {
+      toast.error('Too many requests. Please wait a moment before trying again.');
+      return;
+    }
+
+    // Add user message
+    const userMessage: ChatMessage = {
+      id: generateSecureId(),
+      role: 'user',
+      content: validation.sanitized,
+      timestamp: new Date(),
+    };
+
+    set({ messages: [...messages, userMessage], isExecuting: true, error: null });
+
+    // Create placeholder assistant message
+    const assistantMessageId = generateSecureId();
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '', // Will be filled as chunks arrive
+      timestamp: new Date(),
+    };
+
+    set((state) => ({
+      messages: [...state.messages, assistantMessage],
+    }));
+
+    let accumulatedContent = '';
+    let contextDocuments: any[] | undefined;
+    let executionTimeMs: number | undefined;
+
+    try {
+      const request: AgentExecuteRequest = {
+        agent_id: currentAgent.agent_id,
+        query: validation.sanitized,
+      };
+
+      await agentsApi.executeStream(request, {
+        onMetadata: (data) => {
+          // Optional: Could show agent name or RAG status
+          console.log('Agent metadata:', data);
+        },
+
+        onContext: (data) => {
+          // Store context documents to add to message later
+          contextDocuments = data.documents;
+
+          // Update message with context
+          set((state) => ({
+            messages: state.messages.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, contextDocuments: data.documents }
+                : msg
+            ),
+          }));
+        },
+
+        onContent: (content) => {
+          // Accumulate content and update message in real-time
+          accumulatedContent += content;
+
+          set((state) => ({
+            messages: state.messages.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: accumulatedContent }
+                : msg
+            ),
+          }));
+        },
+
+        onDone: (data) => {
+          // Store execution time
+          executionTimeMs = data.execution_time_ms;
+
+          // Final update with execution time
+          set((state) => ({
+            messages: trimMessages(
+              state.messages.map((msg) =>
+                msg.id === assistantMessageId
+                  ? { ...msg, executionTimeMs: data.execution_time_ms }
+                  : msg
+              )
+            ),
+            isExecuting: false,
+          }));
+
+          // Save to localStorage
+          get().saveHistory();
+        },
+
+        onError: (error) => {
+          const errorMessage = `Streaming error: ${error}`;
+          set({ error: errorMessage, isExecuting: false });
+          toast.error(errorMessage);
+
+          // Replace assistant message with error message
+          set((state) => ({
+            messages: state.messages.map((msg) =>
+              msg.id === assistantMessageId
+                ? {
+                    ...msg,
+                    role: 'system' as const,
+                    content: `Error: ${error}`,
+                  }
+                : msg
+            ),
+          }));
+        },
+      });
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      set({ error: errorMessage, isExecuting: false });
+      toast.error(errorMessage);
+
+      // Replace assistant message with error message
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg.id === assistantMessageId
+            ? {
+                ...msg,
+                role: 'system' as const,
+                content: `Error: ${errorMessage}`,
+              }
+            : msg
+        ),
+      }));
+    }
+  },
+
   setAgent: (agent: Agent) => {
     set({ currentAgent: agent, messages: [] });
     // Load history for this agent
@@ -202,5 +367,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  toggleStreaming: () => {
+    set((state) => ({ useStreaming: !state.useStreaming }));
+    toast.success(`Streaming ${get().useStreaming ? 'enabled' : 'disabled'}`);
   },
 }));
