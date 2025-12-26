@@ -24,7 +24,7 @@ from app.core.exceptions import (
 logger = get_logger(__name__)
 router = APIRouter(prefix="/agents", tags=["Agents"])
 agent_service = AgentService()
-rag_service = RAGService()
+rag_service = RAGService(agent_service=agent_service)  # Share the same agent_service instance
 
 
 @router.post("/", response_model=AgentResponse)

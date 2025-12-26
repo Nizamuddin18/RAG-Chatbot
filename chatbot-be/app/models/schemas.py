@@ -15,6 +15,7 @@ class DocumentResponse(BaseModel):
     file_path: str
     size_bytes: int
     uploaded_at: datetime
+    indexed_in: List[str] = Field(default_factory=list, description="List of index names containing this document")
 
 
 class DocumentList(BaseModel):
@@ -117,3 +118,24 @@ class ErrorResponse(BaseModel):
     error: str
     detail: Optional[str] = None
     success: bool = False
+
+
+# Job Schemas
+class JobResponse(BaseModel):
+    """Schema for job response"""
+    job_id: str
+    job_type: str
+    status: str
+    progress: int = Field(..., ge=0, le=100)
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    result: Optional[Any] = None
+    error: Optional[str] = None
+
+
+class JobCreateResponse(BaseModel):
+    """Schema for job creation response"""
+    job_id: str
+    status: str
+    message: str

@@ -26,9 +26,9 @@ settings = get_settings()
 class RAGService(LoggerMixin):
     """Service for handling RAG (Retrieval-Augmented Generation) operations"""
 
-    def __init__(self):
+    def __init__(self, agent_service: Optional[AgentService] = None):
         self.vector_store_helper = VectorStoreHelper()
-        self.agent_service = AgentService()
+        self.agent_service = agent_service if agent_service else AgentService()
         self._chat_model = None
 
     def _get_chat_model(

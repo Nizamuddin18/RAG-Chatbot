@@ -7,6 +7,7 @@ from app.core.logger import get_logger
 from app.core.config import get_settings
 from app.utils.embedding_helper import EmbeddingHelper
 import os
+import random
 load_dotenv()
 logger = get_logger(__name__)
 settings = get_settings()
@@ -24,10 +25,10 @@ class VectorStoreHelper:
         try:
             indexes = self.pinecone_client.list_indexes()
             index_names = [index.name for index in indexes]
-            logger.info(f"Found {len(index_names)} indexes")
+            logger.debug(f"[Pinecone] Retrieved {len(index_names)} index names: {index_names}")
             return index_names
         except Exception as e:
-            logger.error(f"Error listing indexes: {str(e)}")
+            logger.error(f"[Pinecone] Error listing indexes: {str(e)}")
             raise
 
     def get_index_info(self, index_name: str) -> Dict[str, Any]:
@@ -145,6 +146,138 @@ class VectorStoreHelper:
         except Exception as e:
             logger.error(f"Error getting vector store for {index_name}: {str(e)}")
             raise
+
+    def check_document_in_index(self, index_name: str, file_path: str) -> bool:
+        """
+        Check if a document exists in an index by comparing filenames from metadata.
+
+        This method extracts the filename from the provided file_path and queries
+        Pinecone to find vectors with matching filenames in their 'source' metadata.
+
+        Args:
+            index_name: Name of the Pinecone index to check
+            file_path: File path or URL of the document (will extract filename)
+
+        Returns:
+            True if document exists in index, False otherwise
+        """
+        try:
+            if index_name not in self.list_indexes():
+                logger.warning(f"Index '{index_name}' not found in available indexes")
+                return False
+
+            # Extract filename from path/URL
+            # Examples:
+            # - Azure Blob: https://.../container/filename.pdf -> filename.pdf
+            # - Local: /tmp/xyz/filename.pdf -> filename.pdf
+            # - Windows: C:\path\filename.pdf -> filename.pdf
+            if '/' in file_path:
+                filename = file_path.split('/')[-1]
+            elif '\\' in file_path:
+                filename = file_path.split('\\')[-1]
+            else:
+                filename = file_path
+
+            # Normalize filename for comparison (handle case sensitivity and whitespace)
+            filename_normalized = filename.strip().lower()
+
+            logger.info(f"[Index Check] Searching for '{filename}' in index '{index_name}'")
+
+            index = self.pinecone_client.Index(index_name)
+
+            # Get index statistics
+            index_info = self.get_index_info(index_name)
+            dimension = index_info['dimension']
+            total_vectors = index_info['total_vector_count']
+
+            logger.debug(f"[Index Check] Index stats: dimension={dimension}, vectors={total_vectors}")
+
+            # Check if index is empty
+            if total_vectors == 0:
+                logger.warning(f"[Index Check] Index '{index_name}' is empty (0 vectors)")
+                return False
+
+            # Generate a small random query vector (non-zero for reliable results)
+            random.seed(42)  # Consistent results across calls
+            query_vector = [random.uniform(0.1, 0.2) for _ in range(dimension)]
+
+            # Query strategy: Fetch vectors and check source metadata
+            # Pinecone stores full paths like: /var/folders/.../rag_chatbot_temp/file.pdf
+            # We extract the filename and compare it with our search filename
+
+            # Determine how many vectors to fetch
+            # Fetch enough to have high confidence, but cap at 1000 for performance
+            fetch_count = min(1000, total_vectors)
+
+            logger.debug(f"[Index Check] Fetching {fetch_count} vectors to check source metadata")
+
+            query_response = index.query(
+                vector=query_vector,
+                top_k=fetch_count,
+                include_metadata=True
+            )
+
+            vectors_checked = len(query_response.matches)
+            logger.debug(f"[Index Check] Retrieved {vectors_checked} vectors from index")
+
+            # Track unique documents found in index (for debugging)
+            unique_documents = set()
+            found_match = False
+
+            # Check each vector's source metadata
+            for i, match in enumerate(query_response.matches):
+                if 'source' not in match.metadata:
+                    if i < 3:  # Log first few missing sources only
+                        logger.warning(f"[Index Check] Vector {i} missing 'source' field in metadata")
+                    continue
+
+                source = match.metadata['source']
+
+                # Extract filename from the source path
+                # Handle Unix (/), Windows (\), and bare filenames
+                if '/' in source:
+                    source_filename = source.split('/')[-1]
+                elif '\\' in source:
+                    source_filename = source.split('\\')[-1]
+                else:
+                    source_filename = source
+
+                # Normalize for comparison
+                source_filename_normalized = source_filename.strip().lower()
+
+                # Track unique documents
+                unique_documents.add(source_filename)
+
+                # Log first few sources for debugging
+                if i < 3:
+                    logger.debug(f"[Index Check] Vector {i}: source='{source}' -> filename='{source_filename}'")
+
+                # Compare normalized filenames (case-insensitive, whitespace-trimmed)
+                if source_filename_normalized == filename_normalized:
+                    logger.info(f"[Index Check] ✓ Match found: '{source_filename}' == '{filename}'")
+                    found_match = True
+                    break
+
+            # Log results
+            if found_match:
+                logger.info(f"[Index Check] Document '{filename}' found in index '{index_name}'")
+                return True
+            else:
+                logger.info(f"[Index Check] ✗ Document '{filename}' NOT found in index '{index_name}'")
+                logger.info(f"[Index Check] Checked {vectors_checked} vectors from index")
+
+                # Show what documents ARE in the index (for debugging)
+                if unique_documents:
+                    unique_list = sorted(unique_documents)[:10]  # Show first 10
+                    logger.debug(f"[Index Check] Documents in index (first 10): {unique_list}")
+                    if len(unique_documents) > 10:
+                        logger.debug(f"[Index Check] ... and {len(unique_documents) - 10} more documents")
+
+                return False
+
+        except Exception as e:
+            logger.error(f"[Index Check] Error checking document '{file_path}' in index '{index_name}': {str(e)}", exc_info=True)
+            return False
 
     def get_retriever(self, index_name: str, k: int = 3):
         """Get a retriever for an index"""

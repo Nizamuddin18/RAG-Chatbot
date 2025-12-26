@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import documents, indexes, agents
+from app.api.v1 import documents, indexes, agents, jobs
 from app.core.config import get_settings
 from app.core.logger import get_logger
 
@@ -42,6 +42,10 @@ app.include_router(
 )
 app.include_router(
     agents.router,
+    prefix=settings.API_V1_PREFIX
+)
+app.include_router(
+    jobs.router,
     prefix=settings.API_V1_PREFIX
 )
 

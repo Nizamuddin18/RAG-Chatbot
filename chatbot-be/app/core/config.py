@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     AZURE_OPENAI_DEPLOYMENT_NAME: str
     AZURE_OPENAI_API_VERSION: str
 
+    # Azure Blob Storage
+    AZURE_STORAGE_CONNECTION_STRING: str
+    AZURE_STORAGE_CONTAINER_NAME: str = "data-container"
+
     # Pinecone
     PINECONE_API_KEY: str
     PINECONE_ENVIRONMENT: str
