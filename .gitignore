@@ -7,3 +7,4 @@
 /chatbot-be/logs/app.json.log
 /chatbot-be/logs/app.log
 /chatbot-be/logs/error.log
+/chatbot-be/logs/*
