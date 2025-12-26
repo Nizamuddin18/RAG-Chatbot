@@ -78,7 +78,7 @@ const DocumentUpload: React.FC = () => {
     accept: {
       'application/pdf': ['.pdf'],
     },
-    maxSize: Number(import.meta.env.VITE_MAX_FILE_SIZE) || 15728640, // 15MB default
+    maxSize: Number(import.meta.env.VITE_MAX_FILE_SIZE) || 26214400, // 25MB default
     multiple: true,
     disabled: isLoading,
   });
@@ -103,7 +103,7 @@ const DocumentUpload: React.FC = () => {
               Drag & drop PDF files here, or click to select files
             </p>
             <p className="text-sm text-gray-500">
-              Only PDF files up to 15MB are accepted
+              Only PDF files up to 25MB are accepted
             </p>
           </>
         )}

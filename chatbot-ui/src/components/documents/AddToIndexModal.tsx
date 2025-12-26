@@ -4,8 +4,10 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
 import Badge from '../ui/Badge';
-import { CheckCircle, ArrowRight } from 'lucide-react';
+import ProgressBar from '../ui/ProgressBar';
+import { CheckCircle, ArrowRight, AlertTriangle } from 'lucide-react';
 import { useIndexStore } from '../../store/indexStore';
+import { startJobPolling } from '../../utils/jobPolling';
 import type { Document } from '../../types/document.types';
 import type { Index } from '../../types/index.types';
 
@@ -21,6 +23,9 @@ const AddToIndexModal: React.FC<AddToIndexModalProps> = ({ isOpen, onClose, docu
   const [selectedIndex, setSelectedIndex] = useState<string>('');
   const [updatedIndex, setUpdatedIndex] = useState<Index | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && indexes.length === 0) {
@@ -34,16 +39,54 @@ const AddToIndexModal: React.FC<AddToIndexModalProps> = ({ isOpen, onClose, docu
       setSelectedIndex('');
       setUpdatedIndex(null);
       setShowSuccess(false);
+      setIsProcessing(false);
+      setProgress(0);
+      setError(null);
     }
   }, [isOpen]);
 
   const handleSubmit = async () => {
     if (!selectedIndex || !document) return;
 
-    const result = await updateIndexWithDocuments(selectedIndex, [document.file_path]);
-    if (result) {
-      setUpdatedIndex(result);
-      setShowSuccess(true);
+    setIsProcessing(true);
+    setProgress(0);
+    setError(null);
+
+    try {
+      // Start the job
+      const jobResponse = await updateIndexWithDocuments(selectedIndex, [document.file_path]);
+
+      if (jobResponse) {
+        // Start polling for job status
+        startJobPolling(jobResponse.job_id, {
+          onProgress: (newProgress) => {
+            setProgress(newProgress);
+            setError(null); // Clear any previous errors on progress
+          },
+          onComplete: (result) => {
+            setUpdatedIndex(result);
+            setShowSuccess(true);
+            setIsProcessing(false);
+            setError(null);
+            // Refresh indexes to get latest data
+            fetchIndexes();
+          },
+          onError: (errorMsg) => {
+            const errorMessage = errorMsg || 'An unknown error occurred while updating the index';
+            console.error('Job failed:', errorMessage);
+            setError(errorMessage);
+            setIsProcessing(false);
+          },
+        });
+      } else {
+        setError('Failed to start index update job');
+        setIsProcessing(false);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start index update';
+      console.error('Error starting job:', errorMessage);
+      setError(errorMessage);
+      setIsProcessing(false);
     }
   };
 
@@ -79,6 +122,7 @@ const AddToIndexModal: React.FC<AddToIndexModalProps> = ({ isOpen, onClose, docu
             value={selectedIndex}
             onChange={(e) => setSelectedIndex(e.target.value)}
             required
+            disabled={isProcessing}
           />
 
           {indexes.length === 0 && !isLoading && (
@@ -87,15 +131,43 @@ const AddToIndexModal: React.FC<AddToIndexModalProps> = ({ isOpen, onClose, docu
             </p>
           )}
 
+          {/* Progress Bar */}
+          {isProcessing && (
+            <div className="mt-4">
+              <ProgressBar
+                progress={progress}
+                label="Updating index with document..."
+                showPercentage={true}
+              />
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start">
+                <AlertTriangle className="w-5 h-5 text-red-600 mr-2 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-800">Update Failed</p>
+                  <p className="text-sm text-red-700 mt-1">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end space-x-3 pt-4">
-            <Button variant="secondary" onClick={onClose} disabled={isLoading}>
+            <Button
+              variant="secondary"
+              onClick={onClose}
+              disabled={isLoading || isProcessing}
+            >
               Cancel
             </Button>
             <Button
               variant="primary"
               onClick={handleSubmit}
-              disabled={!selectedIndex || isLoading}
-              loading={isLoading}
+              disabled={!selectedIndex || isLoading || isProcessing}
+              loading={isLoading && !isProcessing}
             >
               Update Index
             </Button>

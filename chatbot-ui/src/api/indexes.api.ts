@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { Index, IndexCreate, IndexList } from '../types/index.types';
+import type { Index, IndexCreate, IndexList, JobCreateResponse } from '../types/index.types';
 import type { MessageResponse } from '../types/common.types';
 
 export const indexesApi = {
@@ -27,15 +27,15 @@ export const indexesApi = {
     return response.data;
   },
 
-  // Update index with specific documents
-  updateWithDocuments: async (indexName: string, documentPaths: string[]): Promise<Index> => {
-    const response = await apiClient.post<Index>(`/indexes/${indexName}/update`, documentPaths);
+  // Update index with specific documents (returns job)
+  updateWithDocuments: async (indexName: string, documentPaths: string[]): Promise<JobCreateResponse> => {
+    const response = await apiClient.post<JobCreateResponse>(`/indexes/${indexName}/update`, documentPaths);
     return response.data;
   },
 
-  // Update index from directory
-  updateFromDirectory: async (indexName: string): Promise<Index> => {
-    const response = await apiClient.post<Index>(`/indexes/${indexName}/update-from-directory`);
+  // Update index from directory (returns job)
+  updateFromDirectory: async (indexName: string): Promise<JobCreateResponse> => {
+    const response = await apiClient.post<JobCreateResponse>(`/indexes/${indexName}/update-from-directory`);
     return response.data;
   },
 };

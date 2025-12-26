@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { FileText, FolderUp } from 'lucide-react';
 import { useDocumentStore } from '../store/documentStore';
 import DocumentUpload from '../components/documents/DocumentUpload';
@@ -8,12 +8,36 @@ import Button from '../components/ui/Button';
 import Spinner from '../components/ui/Spinner';
 
 const DocumentsPage: React.FC = () => {
-  const { documents, isLoading, fetchDocuments, deleteDocument } = useDocumentStore();
+  const {
+    documents,
+    isLoading,
+    isLoadingIndexes,
+    fetchDocuments,
+    deleteDocument,
+    cancelIndexCheck,
+  } = useDocumentStore();
   const [isUpdateDirectoryModalOpen, setIsUpdateDirectoryModalOpen] = useState(false);
 
+  // Use ref to prevent duplicate calls in React StrictMode (development)
+  const hasFetched = useRef(false);
+
   useEffect(() => {
+    // Prevent duplicate calls in StrictMode
+    if (hasFetched.current) {
+      return;
+    }
+    hasFetched.current = true;
+
+    // Fetch documents on mount
+    console.log('[DocumentsPage] Fetching documents on mount');
     fetchDocuments();
-  }, [fetchDocuments]);
+
+    // Cleanup: Cancel any ongoing index check when component unmounts
+    return () => {
+      console.log('[DocumentsPage] Component unmounting, cancelling index check');
+      cancelIndexCheck();
+    };
+  }, []); // Empty dependency array - only run once on mount
 
   const handleDelete = async (filename: string) => {
     if (window.confirm(`Are you sure you want to delete "${filename}"?`)) {
@@ -60,12 +84,20 @@ const DocumentsPage: React.FC = () => {
           <h2 className="text-lg font-semibold text-gray-900">
             Your Documents ({documents.length})
           </h2>
-          {isLoading && documents.length === 0 && (
-            <div className="flex items-center space-x-2 text-gray-600">
-              <Spinner size="sm" />
-              <span className="text-sm">Loading documents...</span>
-            </div>
-          )}
+          <div className="flex items-center space-x-4">
+            {isLoading && documents.length === 0 && (
+              <div className="flex items-center space-x-2 text-gray-600">
+                <Spinner size="sm" />
+                <span className="text-sm">Loading documents...</span>
+              </div>
+            )}
+            {!isLoading && isLoadingIndexes && (
+              <div className="flex items-center space-x-2 text-blue-600">
+                <Spinner size="sm" />
+                <span className="text-sm">Checking indexes...</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <DocumentList

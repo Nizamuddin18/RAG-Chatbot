@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Trash2, Database, FileText } from 'lucide-react';
+import { Trash2, Database, FileText, CheckCircle, XCircle } from 'lucide-react';
 import Button from '../ui/Button';
+import Badge from '../ui/Badge';
 import { formatFileSize, formatDate } from '../../utils/errorHandler';
 import type { Document } from '../../types/document.types';
 import AddToIndexModal from './AddToIndexModal';
@@ -51,6 +52,9 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, onDelete, isLoad
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Uploaded
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Index Status
+                </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -75,6 +79,23 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, onDelete, isLoad
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
                       {formatDate(document.uploaded_at)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-1">
+                      {document.indexed_in && document.indexed_in.length > 0 ? (
+                        document.indexed_in.map((indexName) => (
+                          <Badge key={indexName} variant="success" className="text-xs">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            {indexName}
+                          </Badge>
+                        ))
+                      ) : (
+                        <Badge variant="default" className="text-xs">
+                          <XCircle className="w-3 h-3 mr-1" />
+                          Not indexed
+                        </Badge>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

@@ -199,8 +199,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
 
     let accumulatedContent = '';
-    let contextDocuments: any[] | undefined;
-    let executionTimeMs: number | undefined;
 
     try {
       const request: AgentExecuteRequest = {
@@ -215,9 +213,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         },
 
         onContext: (data) => {
-          // Store context documents to add to message later
-          contextDocuments = data.documents;
-
           // Update message with context
           set((state) => ({
             messages: state.messages.map((msg) =>
@@ -242,9 +237,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         },
 
         onDone: (data) => {
-          // Store execution time
-          executionTimeMs = data.execution_time_ms;
-
           // Final update with execution time
           set((state) => ({
             messages: trimMessages(

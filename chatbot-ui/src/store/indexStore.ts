@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Index, IndexCreate } from '../types/index.types';
+import type { Index, IndexCreate, JobCreateResponse } from '../types/index.types';
 import indexesApi from '../api/indexes.api';
 import { handleApiError } from '../utils/errorHandler';
 import toast from 'react-hot-toast';
@@ -13,8 +13,8 @@ interface IndexStore {
   fetchIndexes: () => Promise<void>;
   createIndex: (data: IndexCreate) => Promise<Index | null>;
   deleteIndex: (indexName: string) => Promise<boolean>;
-  updateIndexWithDocuments: (indexName: string, documentPaths: string[]) => Promise<Index | null>;
-  updateIndexFromDirectory: (indexName: string) => Promise<Index | null>;
+  updateIndexWithDocuments: (indexName: string, documentPaths: string[]) => Promise<JobCreateResponse | null>;
+  updateIndexFromDirectory: (indexName: string) => Promise<JobCreateResponse | null>;
   setSelectedIndex: (index: Index | null) => void;
   clearError: () => void;
 }
@@ -78,15 +78,10 @@ export const useIndexStore = create<IndexStore>((set) => ({
   updateIndexWithDocuments: async (indexName: string, documentPaths: string[]) => {
     set({ isLoading: true, error: null });
     try {
-      const updatedIndex = await indexesApi.updateWithDocuments(indexName, documentPaths);
-      set((state) => ({
-        indexes: state.indexes.map((index) =>
-          index.name === indexName ? updatedIndex : index
-        ),
-        isLoading: false,
-      }));
-      toast.success(`Index "${indexName}" updated with ${documentPaths.length} document(s)`);
-      return updatedIndex;
+      const jobResponse = await indexesApi.updateWithDocuments(indexName, documentPaths);
+      set({ isLoading: false });
+      toast.success(`Index update started for "${indexName}"`);
+      return jobResponse;
     } catch (error) {
       const errorMessage = handleApiError(error);
       set({ error: errorMessage, isLoading: false });
@@ -98,15 +93,10 @@ export const useIndexStore = create<IndexStore>((set) => ({
   updateIndexFromDirectory: async (indexName: string) => {
     set({ isLoading: true, error: null });
     try {
-      const updatedIndex = await indexesApi.updateFromDirectory(indexName);
-      set((state) => ({
-        indexes: state.indexes.map((index) =>
-          index.name === indexName ? updatedIndex : index
-        ),
-        isLoading: false,
-      }));
-      toast.success(`Index "${indexName}" updated from directory`);
-      return updatedIndex;
+      const jobResponse = await indexesApi.updateFromDirectory(indexName);
+      set({ isLoading: false });
+      toast.success(`Index update started for "${indexName}"`);
+      return jobResponse;
     } catch (error) {
       const errorMessage = handleApiError(error);
       set({ error: errorMessage, isLoading: false });
