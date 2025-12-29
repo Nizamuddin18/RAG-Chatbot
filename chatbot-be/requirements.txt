@@ -28,4 +28,5 @@ langchain-openai==1.0.1
 langchain-community==0.4
 langchain-huggingface==1.2.0
 sentence-transformers==5.1.2
--e .
+# Note: Removed '-e .' for production deployment
+# The app directory is already in the Python path
